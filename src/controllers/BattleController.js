@@ -21,12 +21,19 @@ function mkCard(monsterId, prefix, idx) {
 }
 
 export class BattleController {
-  constructor({ playerDeckIds, opponentDeckIds }) {
+  constructor({ playerDeckIds, opponentDeckIds, playerMaxEnergy = ENERGY_PER_TURN, opponentMaxEnergy = ENERGY_PER_TURN }) {
     this.playerCards   = playerDeckIds.map((id, i) => mkCard(id, 'p', i));
     this.opponentCards = opponentDeckIds.map((id, i) => mkCard(id, 'o', i));
+    this.playerMaxEnergy = playerMaxEnergy;
+    this.opponentMaxEnergy = opponentMaxEnergy;
+    // Energy starts at 0; the +1-per-turn gain happens in startPlayerTurn /
+    // endPlayerTurn (which begins the opponent's turn).
+    this.playerEnergy = 0;
+    this.opponentEnergy = 0;
     this.turn = 'player';
-    this.energy = ENERGY_PER_TURN;
     this.log = [];
+    // Apply the turn-1 gain so the player has 1 energy on their opening turn.
+    this.startPlayerTurn();
   }
 
   get playerActive()   { return this.playerCards.find((c) => !c.dead); }
@@ -56,14 +63,14 @@ export class BattleController {
   playerAttack(attackId) {
     if (this.turn !== 'player') return null;
     const attack = ATTACKS.find((a) => a.id === attackId);
-    if (!attack || this.energy < attack.energy) return null;
+    if (!attack || this.playerEnergy < attack.energy) return null;
     const attacker = this.playerActive;
     const target = this.opponentActive;
     if (!attacker || !target) return null;
 
     const dmg = attackDamage(attack, attacker.monster);
     target.hp = Math.max(0, target.hp - dmg);
-    this.energy -= attack.energy;
+    this.playerEnergy -= attack.energy;
     const killed = target.hp === 0;
     if (killed) target.dead = true;
 
@@ -74,18 +81,19 @@ export class BattleController {
   endPlayerTurn() {
     if (this.turn !== 'player') return;
     this.turn = 'opponent';
+    // Opponent gains their turn's energy.
+    this.opponentEnergy = Math.min(this.opponentMaxEnergy, this.opponentEnergy + 1);
   }
 
   // Plan the opponent's turn as a list of attack events for the scene to animate.
   // Greedy: max damage per energy spent, never wastes energy on a target with HP=0.
   planOpponentTurn() {
     const actions = [];
-    let energy = ENERGY_PER_TURN;
+    let energy = this.opponentEnergy;
     const attacker = this.opponentActive;
     const target = this.playerActive;
-    if (!attacker || !target) return actions;
+    if (!attacker || !target) { this.opponentEnergy = energy; return actions; }
 
-    // Compute attacks affordable given energy and pick highest damage.
     const damageOf = (atk) => attackDamage(atk, attacker.monster);
     const sorted = [...ATTACKS].sort((a, b) => damageOf(b) - damageOf(a));
 
@@ -97,11 +105,12 @@ export class BattleController {
         damage: damageOf(pick),
         targetInstanceId: target.instanceId,
       });
-      // Simulate the HP drop so we don't queue overkill we'll never see animated.
       target.hp = Math.max(0, target.hp - damageOf(pick));
       energy -= pick.energy;
       if (target.hp === 0) break;
     }
+    // Unused energy carries over to opponent's next turn.
+    this.opponentEnergy = energy;
     return actions;
   }
 
@@ -141,7 +150,8 @@ export class BattleController {
 
   startPlayerTurn() {
     this.turn = 'player';
-    this.energy = ENERGY_PER_TURN;
+    // Gain 1 energy this turn (capped at max). Unused energy carries over.
+    this.playerEnergy = Math.min(this.playerMaxEnergy, this.playerEnergy + 1);
   }
 }
 

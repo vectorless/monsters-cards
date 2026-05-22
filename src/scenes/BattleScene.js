@@ -4,8 +4,9 @@ import { RARITIES } from '../data/rarities.js';
 import {
   ATTACKS, statsFor,
   COINS_PER_SURVIVOR, WIN_BONUS_COINS,
+  ENERGY_PER_TURN, playerEnergyMax,
 } from '../data/battle.js';
-import { addCoins, removeMonster, getCoins } from '../state.js';
+import { addCoins, removeMonster, getCoins, getEnergyCards } from '../state.js';
 import { drawMonster } from '../render/monsterArt.js';
 import { BattleController, buildOpponentDeck } from '../controllers/BattleController.js';
 import { makeButton, makeCoinChip } from '../ui.js';
@@ -23,10 +24,13 @@ export default class BattleScene extends Phaser.Scene {
   create() {
     this.add.rectangle(GAME_W / 2, GAME_H / 2, GAME_W, GAME_H, 0x0d0f1a);
 
-    // Build battle state
+    // Build battle state. Player energy scales with their owned energy cards (min 1, cap 5).
+    const playerMax = playerEnergyMax(getEnergyCards(this.registry));
     this.battle = new BattleController({
       playerDeckIds: this.playerDeckIds,
       opponentDeckIds: buildOpponentDeck(),
+      playerMaxEnergy: playerMax,
+      opponentMaxEnergy: ENERGY_PER_TURN,
     });
     this.busy = false;
     this.endedBattle = false;
@@ -55,16 +59,17 @@ export default class BattleScene extends Phaser.Scene {
       fontFamily: 'sans-serif', fontSize: '14px', color: '#cfd8dc', align: 'center',
     }).setOrigin(0.5);
 
-    // Energy chips
+    // Energy chips — one per point of player's max energy this battle.
     this.energyChips = [];
     const chipY = 510;
-    const chipsTotalW = 3 * 40 + 2 * 12;
     const chipsStartX = 80;
-    for (let i = 0; i < 3; i++) {
-      const x = chipsStartX + i * (40 + 12);
-      const card = this.add.rectangle(x, chipY, 32, 44, 0xffd54a).setStrokeStyle(2, 0xff8f00);
+    const chipGap = 10;
+    const chipW = 28;
+    for (let i = 0; i < this.battle.playerMaxEnergy; i++) {
+      const x = chipsStartX + i * (chipW + chipGap);
+      const card = this.add.rectangle(x, chipY, chipW, 40, 0xffd54a).setStrokeStyle(2, 0xff8f00);
       const bolt = this.add.text(x, chipY, '⚡', {
-        fontFamily: 'sans-serif', fontSize: '20px', color: '#4e342e', fontStyle: 'bold',
+        fontFamily: 'sans-serif', fontSize: '18px', color: '#4e342e', fontStyle: 'bold',
       }).setOrigin(0.5);
       this.energyChips.push({ card, bolt });
     }
@@ -148,7 +153,7 @@ export default class BattleScene extends Phaser.Scene {
     const frac = card.hp / card.maxHp;
     view.hpBarFg.displayWidth = 200 * frac;
     const color = frac > 0.5 ? 0x4caf50 : frac > 0.2 ? 0xffb300 : 0xe53935;
-    view.hpBarFg.fillColor = color;
+    view.hpBarFg.setFillStyle(color);
   }
 
   refreshHud() {
@@ -157,17 +162,17 @@ export default class BattleScene extends Phaser.Scene {
     const last3 = this.battle.log.slice(-3).join('\n');
     this.logText.setText(last3);
 
-    // Energy chips
+    // Energy chips — show player's current energy out of their cap.
     for (let i = 0; i < this.energyChips.length; i++) {
-      const lit = i < this.battle.energy;
+      const lit = i < this.battle.playerEnergy;
       this.energyChips[i].card.setFillStyle(lit ? 0xffd54a : 0x37474f);
       this.energyChips[i].bolt.setColor(lit ? '#4e342e' : '#90a4ae');
     }
 
     // Buttons
     const myTurn = this.battle.turn === 'player' && !this.busy && !this.endedBattle;
-    this.quickBtn.setEnabled(myTurn && this.battle.energy >= ATTACKS[0].energy);
-    this.heavyBtn.setEnabled(myTurn && this.battle.energy >= ATTACKS[1].energy);
+    this.quickBtn.setEnabled(myTurn && this.battle.playerEnergy >= ATTACKS[0].energy);
+    this.heavyBtn.setEnabled(myTurn && this.battle.playerEnergy >= ATTACKS[1].energy);
     this.endTurnBtn.setEnabled(myTurn);
 
     this.turnText.setText(this.battle.turn === 'player' ? 'Your Turn' : "Opponent's Turn");
@@ -175,6 +180,8 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   // ─────── Actions ───────
+  // Convention: ALWAYS call refreshHud() AFTER setting busy=false so buttons
+  // re-enable. (Earlier bug: refresh happened while still busy → buttons stuck.)
   async playerAttack(attackId) {
     if (this.busy || this.endedBattle) return;
     const res = this.battle.playerAttack(attackId);
@@ -187,9 +194,9 @@ export default class BattleScene extends Phaser.Scene {
       await this.animateCardDeath('opponent');
       this.refreshCardView('opponent');
     }
-    this.refreshHud();
-    this.busy = false;
     if (this.checkBattleOver()) return;
+    this.busy = false;
+    this.refreshHud();
   }
 
   async endPlayerTurn() {
@@ -198,7 +205,6 @@ export default class BattleScene extends Phaser.Scene {
     this.battle.endPlayerTurn();
     this.refreshHud();
 
-    // Opponent turn
     const actions = this.battle.prepareAndApplyOpponentTurn();
     for (const a of actions) {
       if (this.endedBattle) break;
@@ -209,17 +215,16 @@ export default class BattleScene extends Phaser.Scene {
       if (result.killed) {
         await this.animateCardDeath('player');
         this.refreshCardView('player');
-        // If player has another card, opponent stops attacking this turn
-        // (simple v1: one target per turn even after KO).
+        // One target per turn even after a KO (simple v1).
         break;
       }
     }
 
-    if (this.checkBattleOver()) { this.busy = false; return; }
+    if (this.checkBattleOver()) return;
 
     this.battle.startPlayerTurn();
-    this.refreshHud();
     this.busy = false;
+    this.refreshHud();
   }
 
   // ─────── Animations ───────

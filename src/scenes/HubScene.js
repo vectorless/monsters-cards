@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_W, GAME_H } from '../main.js';
-import { getCoins, totalCardsOwned } from '../state.js';
+import { getCoins, totalCardsOwned, getEnergyCards } from '../state.js';
 import { MIN_DECK_SIZE } from '../data/battle.js';
 import { makeButton, makeCoinChip } from '../ui.js';
 
@@ -51,10 +51,11 @@ export default class HubScene extends Phaser.Scene {
       this.scene.pause();
     }, { fill: 0x4527a0, fillHover: 0x673ab7 });
 
-    this.add.text(GAME_W / 2, GAME_H - 36, `you own ${total} card${total === 1 ? '' : 's'}`, {
-      fontFamily: 'sans-serif', fontSize: '13px', color: '#7986cb',
+    const energy = getEnergyCards(this.registry);
+    this.add.text(GAME_W / 2, GAME_H - 40, `${total} cards · ${energy} energy`, {
+      fontFamily: 'sans-serif', fontSize: '14px', color: '#ffd54a', fontStyle: 'bold',
     }).setOrigin(0.5);
-    this.add.text(GAME_W / 2, GAME_H - 18, 'play jigsaw → earn coins → open packs → battle', {
+    this.add.text(GAME_W / 2, GAME_H - 20, 'play jigsaw → earn coins → open packs → battle', {
       fontFamily: 'sans-serif', fontSize: '12px', color: '#5c6bc0',
     }).setOrigin(0.5);
 

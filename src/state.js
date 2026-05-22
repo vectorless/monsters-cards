@@ -3,6 +3,7 @@ import { rollRarity, RARITY_ORDER, rarityRank } from './data/rarities.js';
 import { PACK_COST } from './data/packs.js';
 
 const STORAGE_KEY = 'monsters-cards:v1';
+const STARTER_ENERGY_CARDS = 3;
 
 function saveState(registry) {
   try {
@@ -10,6 +11,7 @@ function saveState(registry) {
       coins: registry.get('coins') ?? 0,
       coinsEarnedTotal: registry.get('coinsEarnedTotal') ?? 0,
       monsters: registry.get('monsters') ?? {},
+      energyCards: registry.get('energyCards') ?? 0,
     }));
   } catch (_) { /* private mode / quota — silently skip */ }
 }
@@ -22,13 +24,16 @@ function loadState(registry) {
     if (typeof d.coins === 'number') registry.set('coins', d.coins);
     if (typeof d.coinsEarnedTotal === 'number') registry.set('coinsEarnedTotal', d.coinsEarnedTotal);
     if (d.monsters && typeof d.monsters === 'object') {
-      // Filter out any monster ids that no longer exist (data shrunk between sessions).
       const filtered = {};
       for (const id of Object.keys(d.monsters)) {
         if (MONSTERS[id]) filtered[id] = d.monsters[id];
       }
       registry.set('monsters', filtered);
     }
+    if (typeof d.energyCards === 'number') {
+      registry.set('energyCards', d.energyCards);
+    }
+    // else: keep STARTER_ENERGY_CARDS from initState, so legacy saves get the starter grant.
   } catch (_) { /* corrupt save — ignore, defaults stand */ }
 }
 
@@ -38,6 +43,7 @@ export function initState(registry) {
   registry.set('coins', 0);
   registry.set('coinsEarnedTotal', 0);
   registry.set('monsters', {}); // id -> { count }
+  registry.set('energyCards', STARTER_ENERGY_CARDS);
   registry.set('lastPackOpened', null);
   loadState(registry);
 }
@@ -47,6 +53,7 @@ export function resetSave(registry) {
   registry.set('coins', 0);
   registry.set('coinsEarnedTotal', 0);
   registry.set('monsters', {});
+  registry.set('energyCards', STARTER_ENERGY_CARDS);
   registry.set('lastPackOpened', null);
 }
 
@@ -141,11 +148,24 @@ export function drawPack(packId) {
   return ids;
 }
 
+export function getEnergyCards(registry) {
+  return registry.get('energyCards') ?? 0;
+}
+
+export function addEnergyCards(registry, n) {
+  const c = (registry.get('energyCards') ?? 0) + n;
+  registry.set('energyCards', c);
+  saveState(registry);
+  return c;
+}
+
 export function tryOpenPack(registry, packId) {
   if ((registry.get('coins') ?? 0) < PACK_COST) return null;
   addCoins(registry, -PACK_COST);
   const draws = drawPack(packId);
   for (const id of draws) addMonster(registry, id);
+  // Every pack guarantees +1 energy card.
+  addEnergyCards(registry, 1);
   registry.set('lastPackOpened', { packId, draws });
   return draws;
 }

@@ -23,12 +23,16 @@ export default class PackOpenScene extends Phaser.Scene {
     this.add.rectangle(GAME_W / 2, GAME_H / 2, GAME_W, GAME_H, 0x000000, 0.94);
     const pack = PACKS[this.packId];
 
-    this.titleText = this.add.text(GAME_W / 2, 60, `${pack.name} opened!`, {
+    this.titleText = this.add.text(GAME_W / 2, 56, `${pack.name} opened!`, {
       fontFamily: 'sans-serif', fontSize: '30px', color: '#fff', fontStyle: 'bold',
     }).setOrigin(0.5);
 
-    this.progressText = this.add.text(GAME_W / 2, 100, '', {
-      fontFamily: 'sans-serif', fontSize: '16px', color: '#b39ddb',
+    this.add.text(GAME_W / 2, 90, '+1 energy card', {
+      fontFamily: 'sans-serif', fontSize: '14px', color: '#ffd54a', fontStyle: 'bold',
+    }).setOrigin(0.5);
+
+    this.progressText = this.add.text(GAME_W / 2, 110, '', {
+      fontFamily: 'sans-serif', fontSize: '14px', color: '#b39ddb',
     }).setOrigin(0.5);
 
     this.hintText = this.add.text(GAME_W / 2, GAME_H - 80, 'tap to reveal', {

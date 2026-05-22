@@ -17,8 +17,15 @@ export const ATTACKS = [
   { id: 'heavy', label: 'Heavy Blow',   energy: 2, base: 50, color: 0xe53935 },
 ];
 
-export const ENERGY_PER_TURN = 3;
+export const ENERGY_PER_TURN = 3;          // opponent energy budget per turn
+export const ENERGY_CAP = 5;                // max energy a player can have, no matter how many cards
 export const MIN_DECK_SIZE = 20;
+
+// Player's per-turn energy = clamp(energyCardsOwned, 1, ENERGY_CAP).
+// At least 1 so a fresh player can still attack.
+export function playerEnergyMax(energyCardsOwned) {
+  return Math.max(1, Math.min(ENERGY_CAP, energyCardsOwned));
+}
 export const COINS_PER_SURVIVOR = 5;
 export const WIN_BONUS_COINS = 20;
 
