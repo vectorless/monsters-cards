@@ -2,7 +2,7 @@ import { MONSTERS, MONSTER_IDS } from '../data/monsters.js';
 import { rarityRank } from '../data/rarities.js';
 import {
   ATTACKS, ENERGY_PER_TURN,
-  statsFor, attackDamage,
+  statsFor, attackDamage, attackEnergyCost,
 } from '../data/battle.js';
 
 // A battle "card" is an instance with its own HP.
@@ -63,14 +63,16 @@ export class BattleController {
   playerAttack(attackId) {
     if (this.turn !== 'player') return null;
     const attack = ATTACKS.find((a) => a.id === attackId);
-    if (!attack || this.playerEnergy < attack.energy) return null;
+    if (!attack) return null;
     const attacker = this.playerActive;
     const target = this.opponentActive;
     if (!attacker || !target) return null;
+    const cost = attackEnergyCost(attack, attacker.monster);
+    if (this.playerEnergy < cost) return null;
 
     const dmg = attackDamage(attack, attacker.monster);
     target.hp = Math.max(0, target.hp - dmg);
-    this.playerEnergy -= attack.energy;
+    this.playerEnergy -= cost;
     const killed = target.hp === 0;
     if (killed) target.dead = true;
 
@@ -95,10 +97,11 @@ export class BattleController {
     if (!attacker || !target) { this.opponentEnergy = energy; return actions; }
 
     const damageOf = (atk) => attackDamage(atk, attacker.monster);
+    const costOf = (atk) => attackEnergyCost(atk, attacker.monster);
     const sorted = [...ATTACKS].sort((a, b) => damageOf(b) - damageOf(a));
 
     while (energy > 0 && target.hp > 0) {
-      const pick = sorted.find((a) => a.energy <= energy);
+      const pick = sorted.find((a) => costOf(a) <= energy);
       if (!pick) break;
       actions.push({
         attackId: pick.id,
@@ -106,7 +109,7 @@ export class BattleController {
         targetInstanceId: target.instanceId,
       });
       target.hp = Math.max(0, target.hp - damageOf(pick));
-      energy -= pick.energy;
+      energy -= costOf(pick);
       if (target.hp === 0) break;
     }
     // Unused energy carries over to opponent's next turn.

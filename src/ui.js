@@ -37,6 +37,7 @@ export function makeButton(scene, x, y, w, h, label, onClick, opts = {}) {
   };
   c.label = t;
   c.bg = bg;
+  c.setLabel = (text) => t.setText(text);
   return c;
 }
 

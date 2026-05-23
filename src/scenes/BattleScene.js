@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { GAME_W, GAME_H } from '../main.js';
 import { RARITIES } from '../data/rarities.js';
 import {
-  ATTACKS, statsFor,
+  ATTACKS, statsFor, attackDamage, attackEnergyCost,
   COINS_PER_SURVIVOR, WIN_BONUS_COINS,
   ENERGY_PER_TURN, playerEnergyMax,
 } from '../data/battle.js';
@@ -77,14 +77,12 @@ export default class BattleScene extends Phaser.Scene {
       fontFamily: 'sans-serif', fontSize: '13px', color: '#b0bec5', fontStyle: 'bold',
     }).setOrigin(0, 0.5);
 
-    // Attack buttons
-    this.quickBtn = makeButton(this, GAME_W / 2 - 110, chipY, 180, 44,
-      `Quick (1⚡ · ${ATTACKS[0].base} dmg)`,
+    // Attack buttons — labels rewritten in refreshHud() based on the active card.
+    this.quickBtn = makeButton(this, GAME_W / 2 - 110, chipY, 180, 44, 'Quick',
       () => this.playerAttack('quick'),
       { fill: 0x2e7d32, fillHover: 0x43a047, fontSize: 14 },
     );
-    this.heavyBtn = makeButton(this, GAME_W / 2 + 90, chipY, 180, 44,
-      `Heavy (2⚡ · ${ATTACKS[1].base} dmg)`,
+    this.heavyBtn = makeButton(this, GAME_W / 2 + 90, chipY, 180, 44, 'Heavy',
       () => this.playerAttack('heavy'),
       { fill: 0xc62828, fillHover: 0xef5350, fontSize: 14 },
     );
@@ -114,9 +112,10 @@ export default class BattleScene extends Phaser.Scene {
     const rarityTxt = this.add.text(-CARD_W / 2 + 130, -CARD_H / 2 + 44, '', {
       fontFamily: 'sans-serif', fontSize: '12px', color: '#fff', fontStyle: 'bold',
     }).setOrigin(0, 0);
-    const dmgTxt = this.add.text(CARD_W / 2 - 14, -CARD_H / 2 + 44, '', {
-      fontFamily: 'sans-serif', fontSize: '12px', color: '#ffab91', fontStyle: 'bold',
-    }).setOrigin(1, 0);
+    // Two attack damage numbers right under name/rarity — weak (Quick) and strong (Heavy).
+    const attacksTxt = this.add.text(-CARD_W / 2 + 130, -CARD_H / 2 + 66, '', {
+      fontFamily: 'sans-serif', fontSize: '13px', color: '#ffab91', fontStyle: 'bold',
+    }).setOrigin(0, 0);
     // HP bar with the HP number overlaid inside.
     const hpBarBg = this.add.rectangle(-CARD_W / 2 + 130 + 100, CARD_H / 2 - 28, 200, 22, 0x263238)
       .setOrigin(0.5)
@@ -126,9 +125,9 @@ export default class BattleScene extends Phaser.Scene {
       fontFamily: 'sans-serif', fontSize: '13px', color: '#fff', fontStyle: 'bold',
       stroke: '#000', strokeThickness: 2,
     }).setOrigin(0.5);
-    c.add([bg, artG, nameTxt, rarityTxt, dmgTxt, hpBarBg, hpBarFg, hpTxt]);
+    c.add([bg, artG, nameTxt, rarityTxt, attacksTxt, hpBarBg, hpBarFg, hpTxt]);
 
-    return { container: c, bg, artG, nameTxt, rarityTxt, dmgTxt, hpTxt, hpBarBg, hpBarFg };
+    return { container: c, bg, artG, nameTxt, rarityTxt, attacksTxt, hpTxt, hpBarBg, hpBarFg };
   }
 
   refreshCardView(side) {
@@ -147,8 +146,11 @@ export default class BattleScene extends Phaser.Scene {
     view.nameTxt.setText(m.name);
     view.rarityTxt.setText(r.label);
     view.rarityTxt.setColor('#' + r.color.toString(16).padStart(6, '0'));
-    const s = statsFor(m);
-    view.dmgTxt.setText(`DMG ${s.dmg}`);
+    const qDmg = attackDamage(ATTACKS[0], m);
+    const hDmg = attackDamage(ATTACKS[1], m);
+    const qCost = attackEnergyCost(ATTACKS[0], m);
+    const hCost = attackEnergyCost(ATTACKS[1], m);
+    view.attacksTxt.setText(`Quick ${qDmg} (${qCost}⚡)   Heavy ${hDmg} (${hCost}⚡)`);
     view.hpTxt.setText(`HP ${card.hp} / ${card.maxHp}`);
     const frac = card.hp / card.maxHp;
     view.hpBarFg.displayWidth = 200 * frac;
@@ -169,10 +171,24 @@ export default class BattleScene extends Phaser.Scene {
       this.energyChips[i].bolt.setColor(lit ? '#4e342e' : '#90a4ae');
     }
 
-    // Buttons
+    // Buttons — label & enable state depend on the player's active card.
     const myTurn = this.battle.turn === 'player' && !this.busy && !this.endedBattle;
-    this.quickBtn.setEnabled(myTurn && this.battle.playerEnergy >= ATTACKS[0].energy);
-    this.heavyBtn.setEnabled(myTurn && this.battle.playerEnergy >= ATTACKS[1].energy);
+    const active = this.battle.playerActive;
+    const quickAtk = ATTACKS[0];
+    const heavyAtk = ATTACKS[1];
+    if (active) {
+      const qCost = attackEnergyCost(quickAtk, active.monster);
+      const qDmg = attackDamage(quickAtk, active.monster);
+      const hCost = attackEnergyCost(heavyAtk, active.monster);
+      const hDmg = attackDamage(heavyAtk, active.monster);
+      this.quickBtn.setLabel(`Quick (${qCost}⚡ · ${qDmg} dmg)`);
+      this.heavyBtn.setLabel(`Heavy (${hCost}⚡ · ${hDmg} dmg)`);
+      this.quickBtn.setEnabled(myTurn && this.battle.playerEnergy >= qCost);
+      this.heavyBtn.setEnabled(myTurn && this.battle.playerEnergy >= hCost);
+    } else {
+      this.quickBtn.setEnabled(false);
+      this.heavyBtn.setEnabled(false);
+    }
     this.endTurnBtn.setEnabled(myTurn);
 
     this.turnText.setText(this.battle.turn === 'player' ? 'Your Turn' : "Opponent's Turn");

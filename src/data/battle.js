@@ -1,20 +1,22 @@
 // Battle balance constants. Stats are derived from monster rarity so we don't
 // have to hand-author hp/dmg on each monster entry.
 
+// dmg scales with rarity (uncapped) and so does the per-attack energy surcharge
+// — better cards hit harder but cost more energy to swing.
 export const STATS_BY_RARITY = {
-  common:    { hp: 40,  dmg: 20  },
-  uncommon:  { hp: 65,  dmg: 35  },
-  rare:      { hp: 100, dmg: 50  },
-  epic:      { hp: 160, dmg: 50  },
-  legendary: { hp: 240, dmg: 50  },
-  secret:    { hp: 340, dmg: 50  },
-  godlike:   { hp: 480, dmg: 50  },
+  common:    { hp: 40,  dmg: 20,  extraEnergy: 0 },
+  uncommon:  { hp: 65,  dmg: 35,  extraEnergy: 0 },
+  rare:      { hp: 100, dmg: 55,  extraEnergy: 1 },
+  epic:      { hp: 160, dmg: 80,  extraEnergy: 1 },
+  legendary: { hp: 240, dmg: 120, extraEnergy: 2 },
+  secret:    { hp: 340, dmg: 170, extraEnergy: 2 },
+  godlike:   { hp: 480, dmg: 240, extraEnergy: 3 },
 };
 
-// Attack tiers. Damage delivered = min(base, attacker.dmg).
+// Damage = round(attacker.dmg * multiplier). Energy = base + rarity surcharge.
 export const ATTACKS = [
-  { id: 'quick', label: 'Quick Strike', energy: 1, base: 20, color: 0x4caf50 },
-  { id: 'heavy', label: 'Heavy Blow',   energy: 2, base: 50, color: 0xe53935 },
+  { id: 'quick', label: 'Quick Strike', energy: 1, multiplier: 1.0, color: 0x4caf50 },
+  { id: 'heavy', label: 'Heavy Blow',   energy: 2, multiplier: 2.5, color: 0xe53935 },
 ];
 
 export const ENERGY_PER_TURN = 3;          // opponent energy budget per turn
@@ -34,7 +36,11 @@ export function statsFor(monster) {
 }
 
 export function attackDamage(attack, attackerMonster) {
-  return Math.min(attack.base, statsFor(attackerMonster).dmg);
+  return Math.round(statsFor(attackerMonster).dmg * attack.multiplier);
+}
+
+export function attackEnergyCost(attack, attackerMonster) {
+  return attack.energy + (statsFor(attackerMonster).extraEnergy ?? 0);
 }
 
 export function findAttack(id) {
